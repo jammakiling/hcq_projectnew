@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block body %}
+<h3 class="m-4">New Purchase</h3>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card bg-light ms-4 me-4 mb-4">
+            <div class="card-header">
+                <h5 class="card-title">Purchase Details</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    {% csrf_token %}
+                    
+                    <!-- Supplier Dropdown -->
+                    <div class="mb-3">
+                        <label for="id_supplier" class="form-label">Supplier</label>
+                        <select name="supplier" id="id_supplier" class="form-select" required>
+                            <option value="" selected disabled>Select Supplier</option>
+                            {% for supplier in suppliers %}
+                                <option value="{{ supplier.id }}" {% if supplier.id == purchase.supplier.id %}selected{% endif %}>
+                                    {{ supplier.supplier_hardware }} ({{ supplier.first_name }} {{ supplier.last_name }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Date Input -->
+                    <div class="mb-3">
+                        <label for="id_date" class="form-label">Date</label>
+                        <input type="datetime-local" name="date" id="id_date" class="form-control" value="{{ purchase.date|date:'Y-m-d\TH:i' }}" required>
+                    </div>
+
+                    <!-- Purchase Items -->
+                    <div id="purchase-items" class="mb-3">
+                        <h5 class="card-title">Products</h5>
+                        <div class="purchase-item mb-3" id="item-1">
+                            <div class="row">
+                                <!-- Inventory Item Dropdown -->
+                                <div class="col-md-4">
+                                    <label for="id_inventory_1" class="form-label">Product</label>
+                                    <select name="inventory_1" id="id_inventory_1" class="form-select" required>
+                                        <option value="" selected disabled>Select Product</option>
+                                        {% for inventory in inventories %}
+                                            <option value="{{ inventory.id }}" data-price="{{ inventory.product.purchase_price }}">
+                                                {{ inventory.product.product_name }} ({{ inventory.product.product_code }})
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <!-- Quantity Input -->
+                                <div class="col-md-4">
+                                    <label for="id_quantity_1" class="form-label">Quantity</label>
+                                    <input type="number" name="quantity_1" id="id_quantity_1" class="form-control" required>
+                                </div>
+
+                                <!-- Price Input (Auto-filled with purchase price from product) -->
+                                <div class="col-md-4">
+                                    <label for="id_price_1" class="form-label">Price</label>
+                                    <input type="number" name="price_1" id="id_price_1" class="form-control" readonly>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Add More Products Button -->
+                    <button type="button" id="add-more" class="btn btn-primary mb-3">Add More Products</button>
+
+                    <!-- Total Price Calculation -->
+                    <div class="mb-3">
+                        <label for="id_total_price" class="form-label">Total Price</label>
+                        <input type="number" id="id_total_price" class="form-control" readonly>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="mb-3 text-center">
+                        <button type="submit" class="btn btn-success">Save Purchase</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Function to update the total price
+function updateTotalPrice() {
+    var total = 0;
+    var items = document.querySelectorAll('.purchase-item');
+    
+    items.forEach(function(item, index) {
+        var quantity = document.getElementById(`id_quantity_${index + 1}`).value;
+        var price = document.getElementById(`id_price_${index + 1}`).value;
+        
+        if (quantity && price) {
+            total += (quantity * price);
+        }
+    });
+
+    document.getElementById('id_total_price').value = total;
+}
+
+// Event listener for inventory selection to update price
+document.querySelectorAll('[id^="id_inventory_"]').forEach(function(select) {
+    select.addEventListener('change', function() {
+        var price = this.options[this.selectedIndex].getAttribute('data-price');
+        var itemIndex = this.id.split('_')[2];
+        document.getElementById(`id_price_${itemIndex}`).value = price;
+        
+        updateTotalPrice(); // Update the total after selecting a product
+    });
+});
+
+// Event listener for quantity input to update the total price
+document.querySelectorAll('[id^="id_quantity_"]').forEach(function(input) {
+    input.addEventListener('input', function() {
+        updateTotalPrice(); // Update the total after changing quantity
+    });
+});
+
+// Add new product row
+document.getElementById("add-more").addEventListener("click", function() {
+    var itemCount = document.querySelectorAll('.purchase-item').length;
+    var newItem = document.createElement("div");
+    newItem.classList.add("purchase-item", "mb-3");
+    newItem.innerHTML = `
+        <div class="row">
+            <div class="col-md-4">
+                <label for="id_inventory_${itemCount + 1}" class="form-label">Product</label>
+                <select name="inventory_${itemCount + 1}" id="id_inventory_${itemCount + 1}" class="form-select" required>
+                    <option value="" selected disabled>Select Product</option>
+                    {% for inventory in inventories %}
+                        <option value="{{ inventory.id }}" data-price="{{ inventory.product.purchase_price }}">
+                            {{ inventory.product.product_name }} ({{ inventory.product.product_code }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="id_quantity_${itemCount + 1}" class="form-label">Quantity</label>
+                <input type="number" name="quantity_${itemCount + 1}" id="id_quantity_${itemCount + 1}" class="form-control" required>
+            </div>
+            <div class="col-md-4">
+                <label for="id_price_${itemCount + 1}" class="form-label">Price</label>
+                <input type="number" name="price_${itemCount + 1}" id="id_price_${itemCount + 1}" class="form-control" readonly>
+            </div>
+        </div>
+    `;
+    document.getElementById('purchase-items').appendChild(newItem);
+
+    // Add change listener to new product dropdown to auto-fill price
+    newItem.querySelector(`#id_inventory_${itemCount + 1}`).addEventListener('change', function() {
+        var price = this.options[this.selectedIndex].getAttribute('data-price');
+        document.getElementById(`id_price_${itemCount + 1}`).value = price;
+        
+        updateTotalPrice(); // Update the total after selecting a product
+    });
+
+    // Add change listener to new quantity input to update the total price
+    newItem.querySelector(`#id_quantity_${itemCount + 1}`).addEventListener('input', function() {
+        updateTotalPrice(); // Update the total after changing quantity
+    });
+});
+
+// Initialize total price calculation when the page loads
+updateTotalPrice();
+</script>
+
+{% endblock %}
